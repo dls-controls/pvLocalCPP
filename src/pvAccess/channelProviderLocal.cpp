@@ -200,6 +200,75 @@ void ChannelGetLocal::get()
         service->getBitSet());
 }
 
+class ChannelMonitorLocal :
+		public Monitor,
+		public std::tr1::enable_shared_from_this<ChannelMonitorLocal>
+{
+public:
+    ChannelMonitorLocal(ChannelLocalPtr const &channelLocal,
+        MonitorService::shared_pointer const & service,
+        MonitorRequester::shared_pointer const & monitorRequester)
+    : channelLocal(channelLocal),
+      service(service),
+      monitorRequester(monitorRequester)
+    {
+    }
+
+    virtual Status start()
+    {
+    	printf("ChannelMonitorLocal::start called\n");
+    	// Collect the value and notify the requester that we have an initial value
+    	return Status::Ok;
+    }
+
+    virtual Status stop()
+    {
+    	printf("ChannelMonitorLocal::stop called\n");
+    	return Status::Ok;
+    }
+
+    virtual MonitorElementPtr poll()
+    {
+    	//static int raw_value = 0;
+    	printf("ChannelMonitorLocal::poll called\n");
+
+
+    	// Following code is to test polling.
+    	// DO NOT USE
+    	//
+    	//PVStructurePtr value = PVStructurePtr(new PVStructure(getFieldCreate()->createFieldBuilder()->add("value",pvInt)->createStructure()));
+    	//value->getSubField<PVInt>("value")->put(raw_value++);
+    	//std::cout << value << std::endl;
+    	//MonitorElementPtr null = MonitorElementPtr(new MonitorElement(value));
+    	//std::cout << null->changedBitSet->size() << std::endl;
+    	//null->changedBitSet->set(0);
+    	//if (raw_value == 5){
+    	//	return MonitorElementPtr();
+    	//}
+    	//
+    	// END OF TEST CODE
+
+
+    	return MonitorElementPtr();
+    }
+
+    virtual void release(MonitorElementPtr const & monitorElement)
+    {
+    	printf("ChannelMonitorLocal::release called\n");
+    }
+
+    virtual void destroy()
+    {
+    	printf("ChannelMonitorLocal::destroy called\n");
+    	channelLocal.reset();
+    }
+
+private:
+    ChannelLocalPtr channelLocal;
+    MonitorService::shared_pointer service;
+    MonitorRequester::shared_pointer monitorRequester;
+
+};
 
 class ChannelRPCLocal :
     public ChannelRPC,
@@ -457,6 +526,58 @@ public:
     }
 
 
+    epics::pvAccess::Monitor::shared_pointer ChannelLocal::createMonitor(
+    		epics::pvAccess::MonitorRequester::shared_pointer const & monitorRequester,
+            epics::pvData::PVStructure::shared_pointer const & pvRequest)
+    {
+        using namespace epics::pvAccess;
+        if (!m_endpoint.get())
+        {
+            Monitor::shared_pointer nullPtr;
+            monitorRequester->monitorConnect(
+            		Status(Status::STATUSTYPE_FATAL, "Endpoint null!"),
+					nullPtr,
+					StructureConstPtr());
+
+            return Channel::createMonitor(monitorRequester, pvRequest);
+        }
+
+        EndpointMonitorPtr epmon = m_endpoint->getEndpointMonitor();
+        if (!epmon.get())
+        {
+            Monitor::shared_pointer nullPtr;
+            monitorRequester->monitorConnect(
+            		Status(Status::STATUSTYPE_FATAL, "Monitor not supported for this channel"),
+					nullPtr,
+					StructureConstPtr());
+
+            return Channel::createMonitor(monitorRequester, pvRequest);
+        }
+
+        MonitorService::shared_pointer monService = epmon->getMonitorService(pvRequest);
+
+        if (!monService.get())
+        {
+            Monitor::shared_pointer nullPtr;
+            monitorRequester->monitorConnect(
+                Status(Status::STATUSTYPE_FATAL,
+                       "Request is not a valid monitor for this channel"),
+                nullPtr, StructureConstPtr());
+            return nullPtr;
+        }
+
+        std::tr1::shared_ptr<ChannelMonitorLocal> channelMonitorImpl(
+                    new ChannelMonitorLocal(shared_from_this(), monService, monitorRequester)
+                );
+
+        // Call into python through the monitor service and ask for the structure
+		PVStructurePtr structure = monService->getPVStructure();
+
+		// Notify requester we are ready, pass on the structure
+		monitorRequester->monitorConnect(Status::Ok, channelMonitorImpl, structure->getStructure());
+
+        return channelMonitorImpl;
+    }
 
 
 

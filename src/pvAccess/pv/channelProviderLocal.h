@@ -254,6 +254,10 @@ public:
         epics::pvAccess::ChannelRPCRequester::shared_pointer const & channelRPCRequester,
         epics::pvData::PVStructure::shared_pointer const & pvRequest);
 
+    virtual epics::pvAccess::Monitor::shared_pointer createMonitor(
+    		epics::pvAccess::MonitorRequester::shared_pointer const & monitorRequester,
+            epics::pvData::PVStructure::shared_pointer const & pvRequest);
+
     virtual void printInfo(std::ostream& out)
     {
         out << "ChannelLocal: ";
