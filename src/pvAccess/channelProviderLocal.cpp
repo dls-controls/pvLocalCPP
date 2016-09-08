@@ -272,19 +272,6 @@ void ChannelPutLocal::destroy()
     channelLocal.reset();
 }
 
-/*void ChannelGetLocal::get()
-{
-    service->get();
-
-    BitSetPtr bitSet = BitSet::create(1);
-    bitSet->set(0);
-
-    channelGetRequester->getDone(
-        Status::Ok,
-        getPtrSelf(),
-        service->getPVStructure(),
-        service->getBitSet());
-}*/
 
 void ChannelPutLocal::get()
 {
@@ -320,50 +307,25 @@ public:
 
     virtual Status start()
     {
-    	printf("ChannelMonitorLocal::start called\n");
-    	// Collect the value and notify the requester that we have an initial value
     	return Status::Ok;
     }
 
     virtual Status stop()
     {
-    	printf("ChannelMonitorLocal::stop called\n");
     	return Status::Ok;
     }
 
     virtual MonitorElementPtr poll()
     {
-    	//static int raw_value = 0;
-    	printf("ChannelMonitorLocal::poll called\n");
-
-
-    	// Following code is to test polling.
-    	// DO NOT USE
-    	//
-    	//PVStructurePtr value = PVStructurePtr(new PVStructure(getFieldCreate()->createFieldBuilder()->add("value",pvInt)->createStructure()));
-    	//value->getSubField<PVInt>("value")->put(raw_value++);
-    	//std::cout << value << std::endl;
-    	//MonitorElementPtr null = MonitorElementPtr(new MonitorElement(value));
-    	//std::cout << null->changedBitSet->size() << std::endl;
-    	//null->changedBitSet->set(0);
-    	//if (raw_value == 5){
-    	//	return MonitorElementPtr();
-    	//}
-    	//
-    	// END OF TEST CODE
-
-
     	return MonitorElementPtr();
     }
 
     virtual void release(MonitorElementPtr const & monitorElement)
     {
-    	printf("ChannelMonitorLocal::release called\n");
     }
 
     virtual void destroy()
     {
-    	printf("ChannelMonitorLocal::destroy called\n");
     	channelLocal.reset();
     }
 
