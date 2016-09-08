@@ -62,6 +62,42 @@ public:
 typedef std::tr1::shared_ptr<EndpointGet> EndpointGetPtr;
 
 
+
+class epicsShareClass PutService
+{
+public:
+    POINTER_DEFINITIONS(PutService);
+
+    virtual void put(epics::pvData::PVStructurePtr const &pvStructure,
+        epics::pvData::BitSetPtr const &bitSet) = 0;
+    virtual void get() = 0;
+    virtual epics::pvData::PVStructurePtr getPVStructure() = 0;
+    virtual epics::pvData::BitSetPtr getBitSet()
+    {
+        using namespace epics::pvData;
+        BitSetPtr bitSet = BitSet::create(1);
+        bitSet->set(0);
+        return bitSet;
+    }
+    virtual ~PutService() {}
+};
+
+typedef std::tr1::shared_ptr<PutService> PutServicePtr;
+
+class epicsShareClass EndpointPut
+{
+public:
+
+    virtual PutService::shared_pointer getPutService(epics::pvData::PVStructure::shared_pointer const &)
+    {
+        return PutService::shared_pointer();
+    }
+    virtual ~EndpointPut() {}
+};
+
+typedef std::tr1::shared_ptr<EndpointPut> EndpointPutPtr;
+
+
 class epicsShareClass EndpointRPC
 {
 public:
@@ -78,6 +114,7 @@ public:
     POINTER_DEFINITIONS(Endpoint);
 
     virtual EndpointGetPtr getEndpointGet() { return EndpointGetPtr(); }
+    virtual EndpointPutPtr getEndpointPut() { return EndpointPutPtr(); }
     virtual EndpointRPCPtr getEndpointRPC() { return EndpointRPCPtr(); }
 
     virtual ~Endpoint() {}

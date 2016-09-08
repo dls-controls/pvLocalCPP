@@ -112,6 +112,9 @@ ChannelFind::shared_pointer ChannelProviderLocal::channelList(
 class ChannelGetLocal;
 typedef std::tr1::shared_ptr<ChannelGetLocal> ChannelGetLocalPtr;
 
+class ChannelPutLocal;
+typedef std::tr1::shared_ptr<ChannelPutLocal> ChannelPutLocalPtr;
+
 
 class ChannelLocal;
 typedef std::tr1::shared_ptr<ChannelLocal> ChannelLocalPtr;
@@ -190,6 +193,89 @@ void ChannelGetLocal::get()
 {
     service->get();
 
+    channelGetRequester->getDone(
+        Status::Ok,
+        getPtrSelf(),
+        service->getPVStructure(),
+        service->getBitSet());
+}
+
+
+
+class ChannelPutLocal :
+    public ChannelPut,
+    public std::tr1::enable_shared_from_this<ChannelPutLocal>
+{
+public:
+    POINTER_DEFINITIONS(ChannelPutLocal);
+    virtual ~ChannelPutLocal()
+    {
+    }
+
+    static ChannelPutLocalPtr create(
+        ChannelLocalPtr const &channelLocal,
+        PutServicePtr const &service,
+        ChannelPutRequester::shared_pointer const & channelPutRequester);
+
+    virtual void put(PVStructurePtr const &pvStructure,BitSetPtr const &bitSet);
+    virtual void get();
+    virtual void destroy();
+    virtual std::tr1::shared_ptr<Channel> getChannel()
+        {return channelLocal;}
+    virtual void cancel(){}
+    virtual void lastRequest() {}
+    virtual void lock() {} //pvRecord->lock();}
+    virtual void unlock() {} //pvRecord->unlock();}
+private:
+    shared_pointer getPtrSelf()
+    {
+        return shared_from_this();
+    }
+
+    ChannelPutLocal(ChannelLocalPtr const &channelLocal,
+        PutServicePtr const & service,
+        ChannelPutRequester::shared_pointer const & channelPutRequester)
+    : channelLocal(channelLocal),
+      service(service),
+      channelPutRequester(channelPutRequester)
+    {
+    }
+
+    ChannelLocalPtr channelLocal;
+    PutServicePtr service;
+    ChannelPutRequester::shared_pointer channelPutRequester;
+};
+
+ChannelPutLocalPtr ChannelPutLocal::create(
+    ChannelLocalPtr const &channelLocal,
+    PutServicePtr const &service,
+    ChannelPutRequester::shared_pointer const & channelPutRequester)
+{
+    ChannelPutLocalPtr put(new ChannelPutLocal(channelLocal, service,
+        channelPutRequester));
+
+    channelPutRequester->channelPutConnect(
+        Status::Ok, put,
+        service->getPVStructure()->getStructure());
+
+    return put;
+}
+
+
+void ChannelPutLocal::destroy()
+{
+    /*{
+        Lock xx(mutex);
+        if(isDestroyed) return;
+        isDestroyed = true;
+    }*/
+    channelLocal.reset();
+}
+
+/*void ChannelGetLocal::get()
+{
+    service->get();
+
     BitSetPtr bitSet = BitSet::create(1);
     bitSet->set(0);
 
@@ -198,7 +284,27 @@ void ChannelGetLocal::get()
         getPtrSelf(),
         service->getPVStructure(),
         service->getBitSet());
+}*/
+
+void ChannelPutLocal::get()
+{
+    service->get();
+
+    channelPutRequester->getDone(
+        Status::Ok,
+        getPtrSelf(),
+        service->getPVStructure(),
+        service->getBitSet());
 }
+
+void ChannelPutLocal::put(
+    PVStructurePtr const &pvStructure,BitSetPtr const &bitSet)
+{
+    service->put(pvStructure,bitSet);
+    channelPutRequester->putDone(Status::Ok,getPtrSelf());
+}
+
+
 
 
 class ChannelRPCLocal :
@@ -412,6 +518,53 @@ public:
         return channelGet;
     }
 
+    epics::pvAccess::ChannelPut::shared_pointer ChannelLocal::createChannelPut(
+            epics::pvAccess::ChannelPutRequester::shared_pointer const &channelPutRequester,
+            PVStructure::shared_pointer const &pvRequest)
+    {
+        using namespace epics::pvAccess;
+
+        if (!m_endpoint.get())
+        {
+            ChannelPut::shared_pointer nullPtr;
+            channelPutRequester->channelPutConnect(
+                Status(Status::STATUSTYPE_FATAL,
+                       "Endpoint null!"),
+                nullPtr, StructureConstPtr());
+
+            return Channel::createChannelPut(channelPutRequester, pvRequest);
+        }
+
+        EndpointPutPtr epput = m_endpoint->getEndpointPut();
+        if (!epput.get())
+        {
+            ChannelPut::shared_pointer nullPtr;
+            channelPutRequester->channelPutConnect(
+                Status(Status::STATUSTYPE_FATAL,
+                       "Put not supported for this channel"),
+                nullPtr, StructureConstPtr());
+
+            return Channel::createChannelPut(channelPutRequester, pvRequest);
+        }
+        PutServicePtr service = epput->getPutService(pvRequest);
+
+        if (!service.get())
+        {
+            ChannelPut::shared_pointer nullPtr;
+            channelPutRequester->channelPutConnect(
+                Status(Status::STATUSTYPE_FATAL,
+                       "Request is not valid for Channel Put for this channel"),
+                nullPtr, StructureConstPtr());
+            return nullPtr;
+        }
+
+        ChannelPutLocalPtr channelPut =
+            ChannelPutLocal::create(
+                shared_from_this(),
+                service,
+                channelPutRequester);
+        return channelPut;
+    }
 
 
     epics::pvAccess::ChannelRPC::shared_pointer ChannelLocal::createChannelRPC(

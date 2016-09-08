@@ -250,6 +250,10 @@ public:
             epics::pvAccess::ChannelGetRequester::shared_pointer const &channelGetRequester,
             epics::pvData::PVStructure::shared_pointer const &pvRequest);
 
+    virtual epics::pvAccess::ChannelPut::shared_pointer createChannelPut(
+            epics::pvAccess::ChannelPutRequester::shared_pointer const &channelPutRequester,
+            epics::pvData::PVStructure::shared_pointer const &pvRequest);
+
     virtual epics::pvAccess::ChannelRPC::shared_pointer createChannelRPC(
         epics::pvAccess::ChannelRPCRequester::shared_pointer const & channelRPCRequester,
         epics::pvData::PVStructure::shared_pointer const & pvRequest);
