@@ -134,7 +134,12 @@ public:
 
     void registerEndpoint(std::string const & endpointName, Endpoint::shared_pointer const & endpoint)
     {
-        endpointProvider->registerEndpoint(endpointName, endpoint);
+        namedEndpointProvider->registerEndpoint(endpointName, endpoint);
+    }
+
+    void addEndpointProvider(EndpointProvider::shared_pointer const & provider)
+    {
+        endpointProvider->addProvider(provider);
     }
 
 private:
@@ -151,7 +156,8 @@ private:
     bool beingDestroyed;    
     epics::pvAccess::ChannelFind::shared_pointer channelFinder;
 
-    NamedEndpointProviderPtr endpointProvider;
+    CompositeEndpointProviderPtr endpointProvider;
+    NamedEndpointProviderPtr namedEndpointProvider;
 
     friend class ChannelProviderLocalRun;
 };

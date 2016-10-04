@@ -50,7 +50,9 @@ ChannelProviderLocalPtr getChannelProviderLocal()
 ChannelProviderLocal::ChannelProviderLocal()
 :   beingDestroyed(false)
 {
-    endpointProvider = NamedEndpointProvider::create();
+    endpointProvider = CompositeEndpointProvider::create();
+    namedEndpointProvider = NamedEndpointProvider::create();
+    addEndpointProvider(namedEndpointProvider);
 }
 
 ChannelProviderLocal::~ChannelProviderLocal()
