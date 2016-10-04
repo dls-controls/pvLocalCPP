@@ -78,11 +78,9 @@ EndpointPtr CompositeEndpointProvider::getEndpoint(const std::string & name)
 
 void CompositeEndpointProvider::addProvider(EndpointProviderPtr const & provider)
 {
-    std::cout << "CompositeEndpointProvider::addProvider("
-              << provider.get() << std::endl;
     epics::pvData::Lock guard(mutex);
-    //ProviderList::iterator found = find(providers.begin(), providers.end(), provider);
-    //if (found == providers.end())
+    ProviderList::iterator found = find(providers.begin(), providers.end(), provider);
+    if (found == providers.end())
         providers.push_back(provider);
 }
 
