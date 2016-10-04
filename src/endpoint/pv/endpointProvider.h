@@ -28,9 +28,9 @@ class epicsShareClass EndpointProvider
 public:
     POINTER_DEFINITIONS(EndpointProvider);
 
-    virtual bool hasEndpoint(const std::string & name) {return false;}
+    virtual bool hasEndpoint(const std::string & name) = 0;
 
-    virtual EndpointPtr getEndpoint(const std::string & name) { return EndpointPtr(); }
+    virtual EndpointPtr getEndpoint(const std::string & name) = 0;
 
     virtual ~EndpointProvider() {}
 };
