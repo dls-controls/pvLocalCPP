@@ -28,9 +28,9 @@ class epicsShareClass EndpointProvider
 public:
     POINTER_DEFINITIONS(EndpointProvider);
 
-    virtual bool hasEndpoint(const std::string & name) {return false;}
+    virtual bool hasEndpoint(const std::string & name) = 0;
 
-    virtual EndpointPtr getEndpoint(const std::string & name) { return EndpointPtr(); }
+    virtual EndpointPtr getEndpoint(const std::string & name) = 0;
 
     virtual ~EndpointProvider() {}
 };
@@ -75,9 +75,28 @@ class epicsShareClass CompositeEndpointProvider : public EndpointProvider
 public:
     POINTER_DEFINITIONS(CompositeEndpointProvider);
 
-    virtual EndpointPtr getEndpoint(const std::string & name) { return EndpointPtr(); }
+    static CompositeEndpointProvider::shared_pointer create()
+    {
+        return CompositeEndpointProvider::shared_pointer(new CompositeEndpointProvider());
+    }
+
+    virtual bool hasEndpoint(const std::string & name);
+
+    virtual EndpointPtr getEndpoint(const std::string & name);
+
+    void addProvider(EndpointProviderPtr const & provider);
 
     virtual ~CompositeEndpointProvider() {}
+
+private:
+
+    typedef std::vector<EndpointProvider::shared_pointer> ProviderList;
+
+    epics::pvData::Mutex mutex;
+
+    ProviderList providers;
+
+    CompositeEndpointProvider() {}
 };
 
 typedef std::tr1::shared_ptr<CompositeEndpointProvider> CompositeEndpointProviderPtr;
