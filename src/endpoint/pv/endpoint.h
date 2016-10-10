@@ -108,12 +108,25 @@ public:
 
 typedef std::tr1::shared_ptr<EndpointRPC> EndpointRPCPtr;
 
+
+class epicsShareClass MonitorServiceListener
+{
+public:
+    POINTER_DEFINITIONS(MonitorServiceListener);
+
+    virtual void update() = 0;
+    virtual ~MonitorServiceListener() {}
+};
+
+typedef std::tr1::shared_ptr<MonitorServiceListener> MonitorServiceListenerPtr;
+
 class epicsShareClass MonitorService
 {
 public:
     POINTER_DEFINITIONS(MonitorService);
 
     virtual epics::pvData::PVStructurePtr getPVStructure() = 0;
+    virtual void addListener(MonitorServiceListenerPtr const &) = 0;
     virtual ~MonitorService() {}
 };
 

@@ -1,4 +1,4 @@
-/* channelChannelProviderLocal.cpp */
+/* channelProviderLocal.cpp */
 /*
  * Copyright information and license terms for this software can be
  * found in the file LICENSE that is included with the distribution
@@ -15,6 +15,9 @@
 
 #include <pv/channelProviderLocal.h>
 
+#include <pv/bitSetUtil.h>
+#include <pv/queue.h>
+
 using namespace epics::pvData;
 using namespace epics::pvAccess;
 using std::tr1::static_pointer_cast;
@@ -23,11 +26,15 @@ using std::cout;
 using std::endl;
 using std::string;
 
+
+
 namespace epics { namespace pvLocal { 
 
 const string providerName("local");
 
-
+typedef Queue<MonitorElement> MonitorElementQueue;
+typedef std::tr1::shared_ptr<MonitorElementQueue> MonitorElementQueuePtr;
+typedef std::tr1::shared_ptr<MonitorRequester> MonitorRequesterPtr;
 
 ChannelProviderLocalPtr getChannelProviderLocal()
 {
@@ -103,9 +110,9 @@ ChannelFind::shared_pointer ChannelProviderLocal::channelFind(
 ChannelFind::shared_pointer ChannelProviderLocal::channelList(
     ChannelListRequester::shared_pointer const & channelListRequester)
 {
-    PVStringArrayPtr records;
+    PVStringArrayPtr channels = getPVDataCreate()->createPVScalarArray<PVStringArray>();
 
-    channelListRequester->channelListResult(Status::Ok, channelFinder, records->view(), false);
+    channelListRequester->channelListResult(Status::Ok, channelFinder, channels->view(), false);
     return channelFinder;
 }
 
@@ -117,6 +124,8 @@ typedef std::tr1::shared_ptr<ChannelGetLocal> ChannelGetLocalPtr;
 class ChannelPutLocal;
 typedef std::tr1::shared_ptr<ChannelPutLocal> ChannelPutLocalPtr;
 
+class ChannelMonitorLocal;
+typedef std::tr1::shared_ptr<ChannelMonitorLocal> ChannelMonitorLocalPtr;
 
 class ChannelLocal;
 typedef std::tr1::shared_ptr<ChannelLocal> ChannelLocalPtr;
@@ -295,21 +304,45 @@ void ChannelPutLocal::put(
 
 class ChannelMonitorLocal :
 		public Monitor,
+        public MonitorServiceListener,
 		public std::tr1::enable_shared_from_this<ChannelMonitorLocal>
 {
 public:
     ChannelMonitorLocal(ChannelLocalPtr const &channelLocal,
+        PVStructurePtr const & pvRequest,
         MonitorService::shared_pointer const & service,
         MonitorRequester::shared_pointer const & monitorRequester)
     : channelLocal(channelLocal),
       service(service),
-      monitorRequester(monitorRequester)
+      monitorRequester(monitorRequester),
+      state(idle)//,
+      //isGroupPut(false),
+      //dataChanged(false)
     {
+        init(pvRequest);
     }
 
     virtual Status start()
     {
-    	return Status::Ok;
+        Lock xx(mutex);
+
+        //if(state==destroyed) return wasDestroyedStatus;
+        //if(state==active) return alreadyStartedStatus;
+
+        state = active;
+        queue->clear();
+        //isGroupPut = false;
+        activeElement = queue->getFree();
+        activeElement->changedBitSet->clear();
+        activeElement->overrunBitSet->clear();
+        activeElement->changedBitSet->set(0);
+        releaseActiveElement();
+        return Status::Ok;
+    }
+
+    void init()
+    {
+        service->addListener(shared_from_this());
     }
 
     virtual Status stop()
@@ -319,11 +352,18 @@ public:
 
     virtual MonitorElementPtr poll()
     {
-    	return MonitorElementPtr();
+        Lock xx(queueMutex);
+        if (state != active)
+            return MonitorElementPtr();
+        return queue->getUsed();
     }
 
     virtual void release(MonitorElementPtr const & monitorElement)
     {
+        Lock xx(queueMutex);
+        if (state != active)
+            return;
+        queue->releaseUsed(monitorElement);
     }
 
     virtual void destroy()
@@ -331,11 +371,122 @@ public:
     	channelLocal.reset();
     }
 
+
+
+
+void update()
+{
+    if(state!=active) return;
+    {
+        Lock xx(mutex);
+        //size_t offset = pvCopy->getCopyOffset(pvRecordField->getPVField());
+        BitSetPtr const &changedBitSet = activeElement->changedBitSet;
+        BitSetPtr const &overrunBitSet = activeElement->overrunBitSet;
+        //bool isSet = changedBitSet->get(offset);
+        //changedBitSet->set(offset);
+        //if(isSet) overrunBitSet->set(offset);
+        //dataChanged = true;
+
+        changedBitSet->set(0);
+        overrunBitSet->clear();
+    }
+
+    /*if(!isGroupPut) {
+        releaseActiveElement();
+        dataChanged = false;
+    }*/
+    releaseActiveElement();
+}
+
+
+
+    bool init(PVStructurePtr const & pvRequest)
+    {
+        PVFieldPtr pvField;
+        size_t queueSize = 2;
+        PVStructurePtr pvOptions = pvRequest->getSubField<PVStructure>("record._options");
+        MonitorRequesterPtr requester = monitorRequester.lock();
+        if(!requester) return false;
+            if(pvOptions) {
+            PVStringPtr pvString  = pvOptions->getSubField<PVString>("queueSize");
+            if(pvString) {
+                try {
+                    int32 size;
+                    std::stringstream ss;
+                    ss << pvString->get();
+                    ss >> size;
+                    queueSize = size;
+                } catch (...) {
+                     requester->message("queueSize " +pvString->get() + " illegal",errorMessage);
+                     return false;
+                }
+            }
+        }
+
+        pvCopy = PVCopy::create(
+            service->getPVStructure(),
+            CreateRequest::create()->createRequest(""),"");
+
+    if(queueSize<2) queueSize = 2;
+    std::vector<MonitorElementPtr> monitorElementArray;
+    monitorElementArray.reserve(queueSize);
+
+    for(size_t i=0; i<queueSize; i++) {
+         PVStructurePtr pvStructure = pvCopy->createPVStructure();
+         MonitorElementPtr monitorElement(
+             new MonitorElement(pvStructure));
+         monitorElementArray.push_back(monitorElement);
+    }
+
+    queue = MonitorElementQueuePtr(new MonitorElementQueue(monitorElementArray));
+
+    return true;
+}
+
 private:
+
     ChannelLocalPtr channelLocal;
     MonitorService::shared_pointer service;
-    MonitorRequester::shared_pointer monitorRequester;
 
+    enum MonitorState {idle,active, destroyed};
+
+    ChannelMonitorLocalPtr getPtrSelf()
+    {
+        return shared_from_this();
+    }
+
+    void releaseActiveElement()
+    {
+        {
+            Lock xx(queueMutex);
+
+            if(state!=active) return;
+            MonitorElementPtr newActive = queue->getFree();
+            if(!newActive) return;
+            pvCopy->updateCopyFromBitSet(activeElement->pvStructurePtr,activeElement->changedBitSet);
+            BitSetUtil::compress(activeElement->changedBitSet,activeElement->pvStructurePtr);
+            BitSetUtil::compress(activeElement->overrunBitSet,activeElement->pvStructurePtr);
+            queue->setUsed(activeElement);
+            activeElement = newActive;
+            activeElement->changedBitSet->clear();
+            activeElement->overrunBitSet->clear();
+        }
+
+        MonitorRequesterPtr requester = monitorRequester.lock();
+        if(!requester) return;
+        requester->monitorEvent(getPtrSelf());
+        return;
+    }
+
+    MonitorRequester::weak_pointer monitorRequester;
+    MonitorState state;
+    PVCopyPtr pvCopy;
+    MonitorElementQueuePtr queue;
+    MonitorElementPtr activeElement;
+    //bool isGroupPut;
+    //bool dataChanged;
+    Mutex mutex;
+    Mutex queueMutex;
 };
 
 
@@ -684,8 +835,9 @@ public:
         }
 
         std::tr1::shared_ptr<ChannelMonitorLocal> channelMonitorImpl(
-                    new ChannelMonitorLocal(shared_from_this(), monService, monitorRequester)
+                    new ChannelMonitorLocal(shared_from_this(), pvRequest, monService, monitorRequester)
                 );
+        channelMonitorImpl->init();
 
         // Call into python through the monitor service and ask for the structure
 		PVStructurePtr structure = monService->getPVStructure();
