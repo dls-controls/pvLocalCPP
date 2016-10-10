@@ -103,9 +103,9 @@ ChannelFind::shared_pointer ChannelProviderLocal::channelFind(
 ChannelFind::shared_pointer ChannelProviderLocal::channelList(
     ChannelListRequester::shared_pointer const & channelListRequester)
 {
-    PVStringArrayPtr records;
+    PVStringArrayPtr channels = getPVDataCreate()->createPVScalarArray<PVStringArray>();
 
-    channelListRequester->channelListResult(Status::Ok, channelFinder, records->view(), false);
+    channelListRequester->channelListResult(Status::Ok, channelFinder, channels->view(), false);
     return channelFinder;
 }
 
