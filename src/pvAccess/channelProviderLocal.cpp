@@ -490,11 +490,10 @@ private:
 };
 
 
-
-class ChannelRPCLocal :
+class epicsShareClass ChannelRPCLocal :
+    public std::tr1::enable_shared_from_this<ChannelRPCLocal>,
     public ChannelRPC,
-    public RPCResponseCallback,
-    public std::tr1::enable_shared_from_this<ChannelRPCLocal>
+    public RPCResponseCallback
 {
 private:
     Channel::shared_pointer m_channel;
@@ -503,6 +502,7 @@ private:
     AtomicBoolean m_lastRequest;
 
 public:
+
     ChannelRPCLocal(
         Channel::shared_pointer const & channel,
         ChannelRPCRequester::shared_pointer const & channelRPCRequester,
@@ -520,14 +520,37 @@ public:
     }
 
     void processRequest(RPCService::shared_pointer const & service,
-                        epics::pvData::PVStructure::shared_pointer const & pvArgument)
-    {
+                        epics::pvData::PVStructure::shared_pointer const & pvArgument);
+/*    {
         epics::pvData::PVStructure::shared_pointer result;
         Status status = Status::Ok;
         bool ok = true;
+        
+        printf("*** RPC creating thread called\n");
+        std::auto_ptr<RPCThreadRunnerParam> param(new RPCThreadRunnerParam());
+        param->rpcPtr = this;
+        param->service = service;
+        param->pvArgument = pvArgument;
+        
+            epicsThreadCreate("PVA Rpc thread",
+                      epicsThreadPriorityMedium,
+                      epicsThreadGetStackSize(epicsThreadStackSmall),
+                      threadRunner, param.get());
+     }*/
+
+     void processThread(RPCService::shared_pointer const & service,
+                        epics::pvData::PVStructure::shared_pointer const & pvArgument)
+     {
+        epics::pvData::PVStructure::shared_pointer result;
+        Status status = Status::Ok;
+        bool ok = true;
+        
+        //printf("*** RPC processRequest 1 called\n");
         try
         {
+        //printf("*** RPC processRequest 2 called\n");
             result = service->request(pvArgument);
+        //printf("*** RPC processRequest 3 called\n");
         }
         catch (RPCRequestException& rre)
         {
@@ -552,7 +575,9 @@ public:
             status = Status(Status::STATUSTYPE_FATAL, "RPCService.request(PVStructure) returned null.");
         }
 
+        //printf("*** RPC processRequest 4 called\n");
         m_channelRPCRequester->requestDone(status, shared_from_this(), result);
+        //printf("*** RPC processRequest 5 called\n");
 
         if (m_lastRequest.get())
             destroy();
@@ -573,7 +598,8 @@ public:
     void processRequest(RPCServiceAsync::shared_pointer const & service,
                         epics::pvData::PVStructure::shared_pointer const & pvArgument)
     {
-        try
+       //printf("*** RPC processRequest 2 called\n");
+       try
         {
             service->request(pvArgument, shared_from_this());
         }
@@ -651,6 +677,42 @@ public:
         // noop
     }
 };
+
+struct RPCThreadRunnerParam 
+{
+  std::tr1::shared_ptr<ChannelRPCLocal> rpcPtr;
+  RPCService::shared_pointer service;
+  epics::pvData::PVStructure::shared_pointer pvArgument;
+};
+
+static void rpcThreadRunner(void* usr)
+{
+    RPCThreadRunnerParam* pusr = static_cast<RPCThreadRunnerParam*>(usr);
+    RPCThreadRunnerParam param = *pusr;
+    //delete pusr;
+    param.rpcPtr->processThread(param.service, param.pvArgument);
+}
+
+void ChannelRPCLocal::processRequest(RPCService::shared_pointer const & service,
+                        epics::pvData::PVStructure::shared_pointer const & pvArgument)
+    {
+        epics::pvData::PVStructure::shared_pointer result;
+        Status status = Status::Ok;
+        
+        printf("*** RPC creating thread called\n");
+        std::auto_ptr<RPCThreadRunnerParam> param(new RPCThreadRunnerParam());
+        param->rpcPtr = shared_from_this();
+        param->service = service;
+        param->pvArgument = pvArgument;
+        
+        printf("*** RPC thread creation\n");
+            epicsThreadCreate("PVA Rpc thread",
+                      epicsThreadPriorityMedium,
+                      epicsThreadGetStackSize(epicsThreadStackSmall),
+                      rpcThreadRunner, param.get());
+                      
+         param.release();
+     }
 
 
     epics::pvAccess::ChannelGet::shared_pointer ChannelLocal::createChannelGet(
