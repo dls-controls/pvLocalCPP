@@ -689,7 +689,8 @@ static void rpcThreadRunner(void* usr)
 {
     RPCThreadRunnerParam* pusr = static_cast<RPCThreadRunnerParam*>(usr);
     RPCThreadRunnerParam param = *pusr;
-    //delete pusr;
+    printf("*** Deleting RPC parameter object after shared pointer objects copied\n");    
+    delete pusr;
     param.rpcPtr->processThread(param.service, param.pvArgument);
 }
 
@@ -700,7 +701,8 @@ void ChannelRPCLocal::processRequest(RPCService::shared_pointer const & service,
         Status status = Status::Ok;
         
         printf("*** RPC creating thread called\n");
-        std::auto_ptr<RPCThreadRunnerParam> param(new RPCThreadRunnerParam());
+//        std::auto_ptr<RPCThreadRunnerParam> param(new RPCThreadRunnerParam());
+        RPCThreadRunnerParam *param = new RPCThreadRunnerParam();
         param->rpcPtr = shared_from_this();
         param->service = service;
         param->pvArgument = pvArgument;
@@ -709,9 +711,10 @@ void ChannelRPCLocal::processRequest(RPCService::shared_pointer const & service,
             epicsThreadCreate("PVA Rpc thread",
                       epicsThreadPriorityMedium,
                       epicsThreadGetStackSize(epicsThreadStackSmall),
-                      rpcThreadRunner, param.get());
+                      rpcThreadRunner, param);
+//                      rpcThreadRunner, param.get());
                       
-         param.release();
+//         param.release();
      }
 
 
